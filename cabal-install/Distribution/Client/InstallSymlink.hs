@@ -28,7 +28,7 @@ import Distribution.Simple.Setup (ConfigFlags)
 import Distribution.Simple.Compiler
 import Distribution.System
 
-data OverwritePolicy = NeverOverwrite | AlwaysOverwrite
+data OverwritePolicy = NeverOverwrite | AlwaysOverwrite | PromptOverwrite
   deriving (Show, Eq)
 
 symlinkBinaries :: Platform -> Compiler
@@ -92,9 +92,11 @@ import Distribution.Compat.Exception ( catchIO )
 import Control.Exception
          ( assert )
 import Data.Maybe
-         ( catMaybes )
+         ( catMaybes, listToMaybe )
+import Control.Monad (when)
+import Data.Char (toLower)
 
-data OverwritePolicy = NeverOverwrite | AlwaysOverwrite
+data OverwritePolicy = NeverOverwrite | AlwaysOverwrite | PromptOverwrite
   deriving (Show, Eq)
 
 -- | We would like by default to install binaries into some location that is on
@@ -222,14 +224,28 @@ symlinkBinary overwritePolicy publicBindir privateBindir publicName privateName 
     OkToOverwrite     -> rmLink >> mkLink >> return True
     NotOurFile ->
       case overwritePolicy of
-        NeverOverwrite  ->                     return False
-        AlwaysOverwrite -> rmLink >> mkLink >> return True
+        NeverOverwrite  -> return False
+        AlwaysOverwrite -> True <$ overwrite
+        PromptOverwrite -> maybeOverwrite
   where
     publicName' = display publicName
     relativeBindir = makeRelative publicBindir privateBindir
     mkLink = createSymbolicLink (relativeBindir </> privateName)
                                 (publicBindir   </> publicName')
     rmLink = removeLink (publicBindir </> publicName')
+    overwrite = rmLink >> mkLink
+    maybeOverwrite :: IO Bool
+    maybeOverwrite = do
+      a <- prompt "Existing file found. Do you want to unlink that file? (y/n)"
+      a <$ when a overwrite
+
+prompt :: String -> IO Bool
+prompt p = do
+  putStrLn p
+  l <- getLine
+  pure $ case listToMaybe l of
+    Nothing -> False
+    Just c  -> toLower c == 'y'
 
 -- | Check a file path of a symlink that we would like to create to see if it
 -- is OK. For it to be OK to overwrite it must either not already exist yet or

@@ -157,7 +157,7 @@ newInstallOptions _ =
     "How to handle already existing symlinks."
     ninstOverwritePolicy (\v flags -> flags { ninstOverwritePolicy = v })
     $ reqArg
-        "always|never"
+        "always|never|prompt"
         readOverwritePolicyFlag
         showOverwritePolicyFlag
   ]
@@ -165,10 +165,13 @@ newInstallOptions _ =
     readOverwritePolicyFlag = ReadE $ \case
       "always" -> Right $ Flag AlwaysOverwrite
       "never"  -> Right $ Flag NeverOverwrite
-      policy   -> Left  $ "'" <> policy <> "' isn't a valid overwrite policy"
-    showOverwritePolicyFlag (Flag AlwaysOverwrite) = ["always"]
-    showOverwritePolicyFlag (Flag NeverOverwrite)  = ["never"]
-    showOverwritePolicyFlag NoFlag                 = []
+      "prompt" -> Right $ Flag PromptOverwrite
+      _policy  -> Left  $ "Policy must be one of: always, never or prompt."
+    showOverwritePolicyFlag (Flag f) = pure $ case f of
+      AlwaysOverwrite -> "always"
+      NeverOverwrite  -> "never"
+      PromptOverwrite -> "prompt"
+    showOverwritePolicyFlag NoFlag = []
 
 installCommand :: CommandUI ( ConfigFlags, ConfigExFlags, InstallFlags
                             , HaddockFlags, TestFlags, NewInstallFlags
@@ -700,7 +703,7 @@ symlinkBuiltPackage verbosity overwritePolicy
                     <> "Use --overwrite-policy=always to overwrite."
                   -- This shouldn't even be possible, but we keep it in case
                   -- symlinking logic changes
-                  AlwaysOverwrite -> "Symlinking '" <> prettyShow exe <> "' failed."
+                  _ -> "Symlinking '" <> prettyShow exe <> "' failed."
       unless success $ die' verbosity errorMessage
 
 -- | Symlink a specific exe.
